@@ -9,51 +9,36 @@ interface AiEngine {
     fun reply(prompt: String, history: List<ChatMessage>): String
 }
 
-class OfflineAiEngine(private val modelPath: String) : AiEngine {
-
-    override fun reply(
-        prompt: String,
-        history: List<ChatMessage>
-    ): String {
-        return try {
-            val status = OfflineNative.ensureLoaded(modelPath)
-
-            if (status != "MODEL_LOADED") {
-                return "Offline Model চালু করা যায়নি: $status"
-            }
-
-            OfflineNative.generate(prompt)
-        } catch (e: Exception) {
-            "Offline AI সমস্যা: ${e.message ?: "আবার চেষ্টা করুন।"}"
-        }
-    }
-}
-
 class OnlineAiEngine : AiEngine {
 
     override fun reply(
         prompt: String,
         history: List<ChatMessage>
     ): String {
-        val connection =
-            URL(WORKER_URL).openConnection() as HttpURLConnection
+        var connection: HttpURLConnection? = null
 
-        try {
+        return try {
+            connection =
+                URL(WORKER_URL).openConnection() as HttpURLConnection
+
             connection.requestMethod = "POST"
-            connection.connectTimeout = 20000
-            connection.readTimeout = 60000
+            connection.connectTimeout = 30000
+            connection.readTimeout = 90000
             connection.doOutput = true
             connection.setRequestProperty(
                 "Content-Type",
-                "application/json"
+                "application/json; charset=utf-8"
             )
 
             val historyJson = JSONArray()
 
-            history.takeLast(20).forEach {
+            history.takeLast(20).forEach { item ->
                 historyJson.put(JSONObject().apply {
-                    put("role", if (it.fromUser) "user" else "model")
-                    put("text", it.text)
+                    put(
+                        "role",
+                        if (item.fromUser) "user" else "model"
+                    )
+                    put("text", item.text)
                 })
             }
 
@@ -62,37 +47,41 @@ class OnlineAiEngine : AiEngine {
                 put("history", historyJson)
             }
 
-            connection.outputStream.use {
-                it.write(request.toString().toByteArray(Charsets.UTF_8))
+            connection.outputStream.use { output ->
+                output.write(request.toString().toByteArray(Charsets.UTF_8))
             }
 
             val code = connection.responseCode
-            val stream =
-                if (code in 200..299) connection.inputStream
-                else connection.errorStream
-
-            val responseText =
-                stream.bufferedReader().use { it.readText() }
-
-            val response = JSONObject(responseText)
-
-            if (code !in 200..299) {
-                return "সার্ভার সমস্যা ($code): ${
-                    response.optString("error", responseText)
-                }"
+            val stream = if (code in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
             }
 
-            return response.optString(
-                "reply",
-                "AI থেকে উত্তর পাওয়া যায়নি।"
-            )
+            val responseText = stream?.bufferedReader()?.use {
+                it.readText()
+            }.orEmpty()
 
+            if (responseText.isBlank()) {
+                "সার্ভার থেকে খালি উত্তর এসেছে। আবার চেষ্টা করো।"
+            } else {
+                val response = JSONObject(responseText)
+
+                if (code !in 200..299) {
+                    "সার্ভার সমস্যা ($code): ${
+                        response.optString("error", responseText)
+                    }"
+                } else {
+                    response.optString(
+                        "reply",
+                        "AI থেকে উত্তর পাওয়া যায়নি।"
+                    )
+                }
+            }
         } catch (e: Exception) {
-            return "সংযোগ সমস্যা: ${
-                e.message ?: "আবার চেষ্টা করুন।"
-            }"
+            "সংযোগ সমস্যা: ${e.message ?: "ইন্টারনেট সংযোগ পরীক্ষা করো।"}"
         } finally {
-            connection.disconnect()
+            connection?.disconnect()
         }
     }
 
