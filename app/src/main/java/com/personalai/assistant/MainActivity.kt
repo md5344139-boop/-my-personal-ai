@@ -2,22 +2,30 @@ package com.personalai.assistant
 
 import android.app.Activity
 import android.os.Bundle
+import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
-import android.content.Context
 import android.widget.*
 import android.text.InputType
+import java.io.File
 
 class MainActivity : Activity() {
+
     private lateinit var store: ChatStore
     private lateinit var messagesBox: LinearLayout
     private lateinit var input: EditText
     private lateinit var modeButton: TextView
+
     private var onlineMode = false
     private val history = mutableListOf<ChatMessage>()
+
+    private val modelFile by lazy {
+        File(filesDir, "qwen.gguf")
+    }
 
     private val bg = Color.rgb(13, 15, 27)
     private val panel = Color.rgb(27, 30, 49)
@@ -29,15 +37,18 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         store = ChatStore(this)
         history.addAll(store.load())
+
         window.statusBarColor = bg
         window.navigationBarColor = bg
+
         buildScreen()
         renderHistory()
     }
 
-    private fun rounded(color: Int, radius: Int): GradientDrawable =
+    private fun rounded(color: Int, radius: Int) =
         GradientDrawable().apply {
             setColor(color)
             cornerRadius = dp(radius).toFloat()
@@ -48,13 +59,12 @@ class MainActivity : Activity() {
         size: Float,
         color: Int,
         bold: Boolean = false
-    ): TextView =
-        TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(color)
-            if (bold) setTypeface(typeface, Typeface.BOLD)
-        }
+    ) = TextView(this).apply {
+        text = value
+        textSize = size
+        setTextColor(color)
+        if (bold) setTypeface(typeface, Typeface.BOLD)
+    }
 
     private fun buildScreen() {
         val root = LinearLayout(this).apply {
@@ -62,6 +72,7 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
             setBackgroundColor(bg)
         }
+
         setContentView(root)
 
         val header = LinearLayout(this).apply {
@@ -69,22 +80,44 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(16))
         }
 
-        header.addView(label("✦", 28f, accent, true),
-            LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(
+            label("✦", 28f, accent, true),
+            LinearLayout.LayoutParams(dp(42), dp(48))
+        )
 
         val titleColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        titleColumn.addView(label("My Personal AI", 20f, Color.WHITE, true))
-        titleColumn.addView(label("YOUR PRIVATE ASSISTANT", 9f, muted, true))
-        header.addView(titleColumn, LinearLayout.LayoutParams(0, -2, 1f))
 
-        modeButton = label("OFFLINE  ▾", 11f,
-            Color.rgb(194, 177, 255), true).apply {
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+        titleColumn.addView(
+            label("My Personal AI", 20f, Color.WHITE, true)
+        )
+        titleColumn.addView(
+            label("YOUR PRIVATE ASSISTANT", 9f, muted, true)
+        )
+
+        header.addView(
+            titleColumn,
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
+
+        val importButton = label("IMPORT", 10f, Color.WHITE, true).apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = rounded(Color.rgb(48, 53, 76), 22)
+            setOnClickListener { chooseModel() }
+        }
+
+        header.addView(importButton)
+
+        modeButton = label(
+            "OFFLINE  ▾", 10f,
+            Color.rgb(194, 177, 255), true
+        ).apply {
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             background = rounded(Color.rgb(44, 36, 70), 24)
             setOnClickListener { toggleMode() }
         }
+
         header.addView(modeButton)
         root.addView(header)
 
@@ -102,26 +135,44 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(95, 66, 157),
-                    Color.rgb(34, 102, 128))
-            ).apply { shape = GradientDrawable.OVAL }
+                intArrayOf(
+                    Color.rgb(95, 66, 157),
+                    Color.rgb(34, 102, 128)
+                )
+            ).apply {
+                shape = GradientDrawable.OVAL
+            }
         }
 
-        welcome.addView(orb, LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-            bottomMargin = dp(12)
-        })
-        welcome.addView(label("Your AI space starts here", 17f, Color.WHITE, true))
-        welcome.addView(label("তোমার ব্যক্তিগত AI সহকারী", 12f, muted).apply {
-            setPadding(0, dp(6), 0, 0)
-        })
+        welcome.addView(
+            orb,
+            LinearLayout.LayoutParams(dp(72), dp(72)).apply {
+                bottomMargin = dp(12)
+            }
+        )
 
-        root.addView(welcome, LinearLayout.LayoutParams(-1, -2).apply {
-            bottomMargin = dp(14)
-        })
+        welcome.addView(
+            label("Your AI space starts here", 17f, Color.WHITE, true)
+        )
 
-        root.addView(label("CONVERSATION", 10f, muted, true).apply {
-            setPadding(dp(2), dp(5), 0, dp(8))
-        })
+        welcome.addView(
+            label("তোমার ব্যক্তিগত AI সহকারী", 12f, muted).apply {
+                setPadding(0, dp(6), 0, 0)
+            }
+        )
+
+        root.addView(
+            welcome,
+            LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(14)
+            }
+        )
+
+        root.addView(
+            label("CONVERSATION", 10f, muted, true).apply {
+                setPadding(dp(2), dp(5), 0, dp(8))
+            }
+        )
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -133,7 +184,10 @@ class MainActivity : Activity() {
         }
 
         scroll.addView(messagesBox)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        )
 
         val composer = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -154,7 +208,10 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(8), dp(4), dp(8))
         }
 
-        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        composer.addView(
+            input,
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
 
         val send = label("➤", 20f, Color.WHITE, true).apply {
             gravity = Gravity.CENTER
@@ -162,14 +219,72 @@ class MainActivity : Activity() {
             setOnClickListener { sendMessage() }
         }
 
-        composer.addView(send, LinearLayout.LayoutParams(dp(46), dp(46)))
+        composer.addView(
+            send,
+            LinearLayout.LayoutParams(dp(46), dp(46))
+        )
+
         root.addView(composer)
 
-        root.addView(label("PRIVATE • PERSONAL • V1.0.0",
-            9f, Color.rgb(105, 112, 139), true).apply {
-            gravity = Gravity.CENTER
-            setPadding(0, dp(10), 0, 0)
-        })
+        root.addView(
+            label("PRIVATE • PERSONAL • V1.0.0", 9f,
+                Color.rgb(105, 112, 139), true).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, 0)
+            }
+        )
+    }
+
+    private fun chooseModel() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+
+        startActivityForResult(intent, 1001)
+    }
+
+    @Deprecated("Legacy file picker callback")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == 1001 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+
+            Thread {
+                try {
+                    contentResolver.openInputStream(uri).use { source ->
+                        if (source == null) {
+                            throw Exception("ফাইল খোলা যায়নি")
+                        }
+
+                        modelFile.outputStream().use { destination ->
+                            source.copyTo(destination)
+                        }
+                    }
+
+                    runOnUiThread {
+                        Toast.makeText(
+                            this,
+                            "Model Import সফল হয়েছে",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this,
+                            "Import সমস্যা: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }.start()
+        }
     }
 
     private fun toggleMode() {
@@ -195,8 +310,7 @@ class MainActivity : Activity() {
         messagesBox.removeAllViews()
 
         if (history.isEmpty()) {
-            addBubble(false,
-                "স্বাগতম! তোমার ব্যক্তিগত AI সহকারী প্রস্তুত।")
+            addBubble(false, "স্বাগতম! তোমার ব্যক্তিগত AI সহকারী প্রস্তুত।")
         } else {
             history.forEach {
                 addBubble(it.fromUser, it.text)
@@ -211,7 +325,9 @@ class MainActivity : Activity() {
 
         val bubble = label(message, 14f, Color.WHITE).apply {
             setPadding(dp(13), dp(11), dp(13), dp(11))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+            maxWidth =
+                (resources.displayMetrics.widthPixels * 0.82f).toInt()
+
             background = rounded(
                 if (fromUser) Color.rgb(78, 61, 139)
                 else Color.rgb(36, 40, 62),
@@ -220,9 +336,13 @@ class MainActivity : Activity() {
         }
 
         row.addView(bubble)
-        messagesBox.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
-            bottomMargin = dp(10)
-        })
+
+        messagesBox.addView(
+            row,
+            LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            }
+        )
     }
 
     private fun sendMessage() {
@@ -230,6 +350,15 @@ class MainActivity : Activity() {
         if (message.isEmpty()) return
 
         val useOnline = onlineMode
+
+        if (!useOnline && !modelFile.exists()) {
+            Toast.makeText(
+                this,
+                "প্রথমে IMPORT বাটন থেকে qwen.gguf নির্বাচন করুন",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
 
         val userMessage = ChatMessage(
             System.currentTimeMillis(), message, true
@@ -242,13 +371,15 @@ class MainActivity : Activity() {
         input.setText("")
         input.isEnabled = false
 
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+        (getSystemService(Context.INPUT_METHOD_SERVICE)
+            as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
 
         addBubble(false, "উত্তর তৈরি হচ্ছে...")
 
         val engine: AiEngine =
-            if (useOnline) OnlineAiEngine() else OfflineAiEngine()
+            if (useOnline) OnlineAiEngine()
+            else OfflineAiEngine(modelFile.absolutePath)
 
         val previousHistory = history.dropLast(1).toList()
 
@@ -267,7 +398,6 @@ class MainActivity : Activity() {
                 history.add(reply)
                 addBubble(false, answer)
                 store.save(history)
-
                 input.isEnabled = true
             }
         }.start()

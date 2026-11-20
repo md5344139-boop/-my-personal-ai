@@ -9,23 +9,47 @@ interface AiEngine {
     fun reply(prompt: String, history: List<ChatMessage>): String
 }
 
-class OfflineAiEngine : AiEngine {
-    override fun reply(prompt: String, history: List<ChatMessage>): String {
-        return "Offline AI model এখনো সংযুক্ত করা হয়নি।"
+class OfflineAiEngine(private val modelPath: String) : AiEngine {
+
+    override fun reply(
+        prompt: String,
+        history: List<ChatMessage>
+    ): String {
+        return try {
+            val status = OfflineNative.ensureLoaded(modelPath)
+
+            if (status != "MODEL_LOADED") {
+                return "Offline Model চালু করা যায়নি: $status"
+            }
+
+            OfflineNative.generate(prompt)
+        } catch (e: Exception) {
+            "Offline AI সমস্যা: ${e.message ?: "আবার চেষ্টা করুন।"}"
+        }
     }
 }
 
 class OnlineAiEngine : AiEngine {
-    override fun reply(prompt: String, history: List<ChatMessage>): String {
-        val connection = URL(WORKER_URL).openConnection() as HttpURLConnection
+
+    override fun reply(
+        prompt: String,
+        history: List<ChatMessage>
+    ): String {
+        val connection =
+            URL(WORKER_URL).openConnection() as HttpURLConnection
+
         try {
             connection.requestMethod = "POST"
             connection.connectTimeout = 20000
             connection.readTimeout = 60000
             connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
 
             val historyJson = JSONArray()
+
             history.takeLast(20).forEach {
                 historyJson.put(JSONObject().apply {
                     put("role", if (it.fromUser) "user" else "model")
@@ -43,18 +67,30 @@ class OnlineAiEngine : AiEngine {
             }
 
             val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream
-                         else connection.errorStream
-            val responseText = stream.bufferedReader().use { it.readText() }
+            val stream =
+                if (code in 200..299) connection.inputStream
+                else connection.errorStream
+
+            val responseText =
+                stream.bufferedReader().use { it.readText() }
+
             val response = JSONObject(responseText)
 
             if (code !in 200..299) {
-                return "সার্ভার সমস্যা ($code): ${response.optString("error", responseText)}"
+                return "সার্ভার সমস্যা ($code): ${
+                    response.optString("error", responseText)
+                }"
             }
 
-            return response.optString("reply", "AI থেকে উত্তর পাওয়া যায়নি।")
+            return response.optString(
+                "reply",
+                "AI থেকে উত্তর পাওয়া যায়নি।"
+            )
+
         } catch (e: Exception) {
-            return "সংযোগ সমস্যা: ${e.message ?: "আবার চেষ্টা করুন।"}"
+            return "সংযোগ সমস্যা: ${
+                e.message ?: "আবার চেষ্টা করুন।"
+            }"
         } finally {
             connection.disconnect()
         }
